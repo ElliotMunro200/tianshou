@@ -137,7 +137,8 @@ def test_sac(args=get_args()):
     else:
         buffer = ReplayBuffer(args.buffer_size)
     train_collector = Collector(policy, train_envs, buffer, exploration_noise=True)
-    test_collector = Collector(policy, test_envs)
+    test_collector = None
+    #test_collector = Collector(policy, test_envs)
     train_collector.collect(n_step=args.start_timesteps, random=True)
 
     # log
