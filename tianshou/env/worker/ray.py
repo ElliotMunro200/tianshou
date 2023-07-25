@@ -1,8 +1,9 @@
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional
 
-import gym
+import gymnasium as gym
 import numpy as np
 
+from tianshou.env.utils import gym_new_venv_step_type
 from tianshou.env.worker import EnvWorker
 
 try:
@@ -55,16 +56,14 @@ class RayEnvWorker(EnvWorker):
         else:
             self.result = self.env.step.remote(action)
 
-    def recv(
-        self
-    ) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray], np.ndarray]:
+    def recv(self) -> gym_new_venv_step_type:
         return ray.get(self.result)  # type: ignore
 
     def seed(self, seed: Optional[int] = None) -> Optional[List[int]]:
         super().seed(seed)
         try:
             return ray.get(self.env.seed.remote(seed))
-        except NotImplementedError:
+        except (AttributeError, NotImplementedError):
             self.env.reset.remote(seed=seed)
             return None
 

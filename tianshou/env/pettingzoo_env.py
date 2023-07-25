@@ -1,9 +1,19 @@
+import warnings
 from abc import ABC
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
-import gym.spaces
+import pettingzoo
+from gymnasium import spaces
+from packaging import version
 from pettingzoo.utils.env import AECEnv
 from pettingzoo.utils.wrappers import BaseWrapper
+
+if version.parse(pettingzoo.__version__) < version.parse("1.21.0"):
+    warnings.warn(
+        f"You are using PettingZoo {pettingzoo.__version__}. "
+        f"Future tianshou versions may not support PettingZoo<1.21.0. "
+        f"Consider upgrading your PettingZoo version.", DeprecationWarning
+    )
 
 
 class PettingZooEnv(AECEnv, ABC):
@@ -17,7 +27,7 @@ class PettingZooEnv(AECEnv, ABC):
         # obs is a dict containing obs, agent_id, and mask
         obs = env.reset()
         action = policy(obs)
-        obs, rew, done, info = env.step(action)
+        obs, rew, trunc, term, info = env.step(action)
         env.close()
 
     The available action's mask is set to True, otherwise it is set to False.
@@ -55,9 +65,11 @@ class PettingZooEnv(AECEnv, ABC):
 
         self.reset()
 
-    def reset(self, *args: Any, **kwargs: Any) -> Union[dict, Tuple[dict, dict]]:
+    def reset(self, *args: Any, **kwargs: Any) -> Tuple[dict, dict]:
         self.env.reset(*args, **kwargs)
-        observation, _, _, info = self.env.last(self)
+
+        observation, reward, terminated, truncated, info = self.env.last(self)
+
         if isinstance(observation, dict) and 'action_mask' in observation:
             observation_dict = {
                 'agent_id': self.env.agent_selection,
@@ -66,7 +78,7 @@ class PettingZooEnv(AECEnv, ABC):
                 [True if obm == 1 else False for obm in observation['action_mask']]
             }
         else:
-            if isinstance(self.action_space, gym.spaces.Discrete):
+            if isinstance(self.action_space, spaces.Discrete):
                 observation_dict = {
                     'agent_id': self.env.agent_selection,
                     'obs': observation,
@@ -78,14 +90,13 @@ class PettingZooEnv(AECEnv, ABC):
                     'obs': observation,
                 }
 
-        if "return_info" in kwargs and kwargs["return_info"]:
-            return observation_dict, info
-        else:
-            return observation_dict
+        return observation_dict, info
 
-    def step(self, action: Any) -> Tuple[Dict, List[int], bool, Dict]:
+    def step(self, action: Any) -> Tuple[Dict, List[int], bool, bool, Dict]:
         self.env.step(action)
-        observation, rew, done, info = self.env.last()
+
+        observation, rew, term, trunc, info = self.env.last()
+
         if isinstance(observation, dict) and 'action_mask' in observation:
             obs = {
                 'agent_id': self.env.agent_selection,
@@ -94,7 +105,7 @@ class PettingZooEnv(AECEnv, ABC):
                 [True if obm == 1 else False for obm in observation['action_mask']]
             }
         else:
-            if isinstance(self.action_space, gym.spaces.Discrete):
+            if isinstance(self.action_space, spaces.Discrete):
                 obs = {
                     'agent_id': self.env.agent_selection,
                     'obs': observation,
@@ -105,7 +116,7 @@ class PettingZooEnv(AECEnv, ABC):
 
         for agent_id, reward in self.env.rewards.items():
             self.rewards[self.agent_idx[agent_id]] = reward
-        return obs, self.rewards, done, info
+        return obs, self.rewards, term, trunc, info
 
     def close(self) -> None:
         self.env.close()
@@ -113,8 +124,8 @@ class PettingZooEnv(AECEnv, ABC):
     def seed(self, seed: Any = None) -> None:
         try:
             self.env.seed(seed)
-        except NotImplementedError:
+        except (NotImplementedError, AttributeError):
             self.env.reset(seed=seed)
 
-    def render(self, mode: str = "human") -> Any:
-        return self.env.render(mode)
+    def render(self) -> Any:
+        return self.env.render()

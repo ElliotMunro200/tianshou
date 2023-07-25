@@ -4,7 +4,7 @@ import os
 import pickle
 import pprint
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -108,7 +108,6 @@ def test_cql(args=get_args()):
     actor = ActorProb(
         net_a,
         action_shape=args.action_shape,
-        max_action=args.max_action,
         device=args.device,
         unbounded=True,
         conditioned_sigma=True,

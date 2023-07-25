@@ -3,7 +3,7 @@ import os
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import pettingzoo.butterfly.pistonball_v6 as pistonball_v6
 import torch
@@ -236,12 +236,6 @@ def train_agent(
 
     def stop_fn(mean_rewards):
         return False
-
-    def train_fn(epoch, env_step):
-        [agent.set_eps(args.eps_train) for agent in policy.policies.values()]
-
-    def test_fn(epoch, env_step):
-        [agent.set_eps(args.eps_test) for agent in policy.policies.values()]
 
     def reward_metric(rews):
         return rews[:, 0]

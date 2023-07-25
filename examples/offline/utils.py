@@ -1,7 +1,7 @@
 from typing import Tuple
 
 import d4rl
-import gym
+import gymnasium as gym
 import h5py
 import numpy as np
 
@@ -16,7 +16,9 @@ def load_buffer_d4rl(expert_data_task: str) -> ReplayBuffer:
         act=dataset["actions"],
         rew=dataset["rewards"],
         done=dataset["terminals"],
-        obs_next=dataset["next_observations"]
+        obs_next=dataset["next_observations"],
+        terminated=dataset["terminals"],
+        truncated=np.zeros(len(dataset["terminals"]))
     )
     return replay_buffer
 
@@ -28,7 +30,9 @@ def load_buffer(buffer_path: str) -> ReplayBuffer:
             act=dataset["actions"],
             rew=dataset["rewards"],
             done=dataset["terminals"],
-            obs_next=dataset["next_observations"]
+            obs_next=dataset["next_observations"],
+            terminated=dataset["terminals"],
+            truncated=np.zeros(len(dataset["terminals"]))
         )
     return buffer
 

@@ -1,6 +1,6 @@
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple
 
-import gym
+import gymnasium as gym
 import numpy as np
 
 from tianshou.env.worker import EnvWorker
@@ -19,7 +19,7 @@ class DummyEnvWorker(EnvWorker):
     def set_env_attr(self, key: str, value: Any) -> None:
         setattr(self.env.unwrapped, key, value)
 
-    def reset(self, **kwargs: Any) -> Union[np.ndarray, Tuple[np.ndarray, dict]]:
+    def reset(self, **kwargs: Any) -> Tuple[np.ndarray, dict]:
         if "seed" in kwargs:
             super().seed(kwargs["seed"])
         return self.env.reset(**kwargs)
@@ -40,8 +40,8 @@ class DummyEnvWorker(EnvWorker):
     def seed(self, seed: Optional[int] = None) -> Optional[List[int]]:
         super().seed(seed)
         try:
-            return self.env.seed(seed)
-        except NotImplementedError:
+            return self.env.seed(seed)  # type: ignore
+        except (AttributeError, NotImplementedError):
             self.env.reset(seed=seed)
             return [seed]  # type: ignore
 

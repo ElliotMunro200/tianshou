@@ -2,10 +2,10 @@ import random
 import time
 from copy import deepcopy
 
-import gym
+import gymnasium as gym
 import networkx as nx
 import numpy as np
-from gym.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
+from gymnasium.spaces import Box, Dict, Discrete, MultiDiscrete, Tuple
 
 
 class MyTestEnv(gym.Env):
@@ -71,28 +71,21 @@ class MyTestEnv(gym.Env):
             self.action_space = MultiDiscrete([2, 2])
         else:
             self.action_space = Discrete(2)
-        self.done = False
+        self.terminated = False
         self.index = 0
-        self.seed()
 
-    def seed(self, seed=0):
-        self.rng = np.random.RandomState(seed)
-        return [seed]
-
-    def reset(self, state=0, seed=None, return_info=False):
-        if seed is not None:
-            self.rng = np.random.RandomState(seed)
-        self.done = False
+    def reset(self, seed=None, options=None):
+        if options is None:
+            options = {"state": 0}
+        super().reset(seed=seed)
+        self.terminated = False
         self.do_sleep()
-        self.index = state
-        if return_info:
-            return self._get_state(), {'key': 1, 'env': self}
-        else:
-            return self._get_state()
+        self.index = options["state"]
+        return self._get_state(), {'key': 1, 'env': self}
 
     def _get_reward(self):
         """Generate a non-scalar reward if ma_rew is True."""
-        end_flag = int(self.done)
+        end_flag = int(self.terminated)
         if self.ma_rew > 0:
             return [end_flag] * self.ma_rew
         return end_flag
@@ -102,14 +95,14 @@ class MyTestEnv(gym.Env):
         if self.dict_state:
             return {
                 'index': np.array([self.index], dtype=np.float32),
-                'rand': self.rng.rand(1)
+                'rand': self.np_random.random(1)
             }
         elif self.recurse_state:
             return {
                 'index': np.array([self.index], dtype=np.float32),
                 'dict': {
-                    "tuple": (np.array([1], dtype=int), self.rng.rand(2)),
-                    "rand": self.rng.rand(1, 2)
+                    "tuple": (np.array([1], dtype=int), self.np_random.random(2)),
+                    "rand": self.np_random.random((1, 2))
                 }
             }
         elif self.array_state:
@@ -132,21 +125,21 @@ class MyTestEnv(gym.Env):
         self.steps += 1
         if self._md_action:
             action = action[0]
-        if self.done:
+        if self.terminated:
             raise ValueError('step after done !!!')
         self.do_sleep()
         if self.index == self.size:
-            self.done = True
-            return self._get_state(), self._get_reward(), self.done, {}
+            self.terminated = True
+            return self._get_state(), self._get_reward(), self.terminated, False, {}
         if action == 0:
             self.index = max(self.index - 1, 0)
-            return self._get_state(), self._get_reward(), self.done, \
+            return self._get_state(), self._get_reward(), self.terminated, False, \
                 {'key': 1, 'env': self} if self.dict_state else {}
         elif action == 1:
             self.index += 1
-            self.done = self.index == self.size
+            self.terminated = self.index == self.size
             return self._get_state(), self._get_reward(), \
-                self.done, {'key': 1, 'env': self}
+                self.terminated, False, {'key': 1, 'env': self}
 
 
 class NXEnv(gym.Env):
@@ -168,10 +161,55 @@ class NXEnv(gym.Env):
         graph_state = np.random.rand(self.size, self.feat_dim)
         for i in range(self.size):
             self.graph.nodes[i]["data"] = graph_state[i]
-        return self._encode_obs()
+        return self._encode_obs(), {}
 
     def step(self, action):
         next_graph_state = np.random.rand(self.size, self.feat_dim)
         for i in range(self.size):
             self.graph.nodes[i]["data"] = next_graph_state[i]
-        return self._encode_obs(), 1.0, 0, {}
+        return self._encode_obs(), 1.0, 0, 0, {}
+
+
+class MyGoalEnv(MyTestEnv):
+
+    def __init__(self, *args, **kwargs):
+        assert kwargs.get("dict_state", 0) + kwargs.get("recurse_state", 0) == 0, \
+            "dict_state / recurse_state not supported"
+        super().__init__(*args, **kwargs)
+        obs, _ = super().reset(options={"state": 0})
+        obs, _, _, _, _ = super().step(1)
+        self._goal = obs * self.size
+        super_obsv = self.observation_space
+        self.observation_space = gym.spaces.Dict(
+            {
+                'observation': super_obsv,
+                'achieved_goal': super_obsv,
+                'desired_goal': super_obsv,
+            }
+        )
+
+    def reset(self, *args, **kwargs):
+        obs, info = super().reset(*args, **kwargs)
+        new_obs = {
+            'observation': obs,
+            'achieved_goal': obs,
+            'desired_goal': self._goal
+        }
+        return new_obs, info
+
+    def step(self, *args, **kwargs):
+        obs_next, rew, terminated, truncated, info = super().step(*args, **kwargs)
+        new_obs_next = {
+            'observation': obs_next,
+            'achieved_goal': obs_next,
+            'desired_goal': self._goal
+        }
+        return new_obs_next, rew, terminated, truncated, info
+
+    def compute_reward_fn(
+        self, achieved_goal: np.ndarray, desired_goal: np.ndarray, info: dict
+    ) -> np.ndarray:
+        axis = -1
+        if self.array_state:
+            axis = (-3, -2, -1)
+        return (achieved_goal == desired_goal).all(axis=axis)

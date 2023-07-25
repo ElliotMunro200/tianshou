@@ -2,7 +2,7 @@ import time
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 
@@ -37,10 +37,12 @@ class Collector(object):
 
     The "preprocess_fn" is a function called before the data has been added to the
     buffer with batch format. It will receive only "obs" and "env_id" when the
-    collector resets the environment, and will receive six keys "obs_next", "rew",
-    "done", "info", "policy" and "env_id" in a normal env step. It returns either a
-    dict or a :class:`~tianshou.data.Batch` with the modified keys and values. Examples
-    are in "test/base/test_collector.py".
+    collector resets the environment, and will receive the keys "obs_next", "rew",
+    "terminated", "truncated, "info", "policy" and "env_id" in a normal env step.
+    Alternatively, it may also accept the keys "obs_next", "rew", "done", "info",
+    "policy" and "env_id".
+    It returns either a dict or a :class:`~tianshou.data.Batch` with the modified
+    keys and values. Examples are in "test/base/test_collector.py".
 
     .. note::
 
@@ -115,7 +117,15 @@ class Collector(object):
         # use empty Batch for "state" so that self.data supports slicing
         # convert empty Batch to None when passing data to policy
         self.data = Batch(
-            obs={}, act={}, rew={}, done={}, obs_next={}, info={}, policy={}
+            obs={},
+            act={},
+            rew={},
+            terminated={},
+            truncated={},
+            done={},
+            obs_next={},
+            info={},
+            policy={}
         )
         self.reset_env(gym_reset_kwargs)
         if reset_buffer:
@@ -133,24 +143,14 @@ class Collector(object):
     def reset_env(self, gym_reset_kwargs: Optional[Dict[str, Any]] = None) -> None:
         """Reset all of the environments."""
         gym_reset_kwargs = gym_reset_kwargs if gym_reset_kwargs else {}
-        rval = self.env.reset(**gym_reset_kwargs)
-        returns_info = isinstance(rval, (tuple, list)) and len(rval) == 2 and (
-            isinstance(rval[1], dict) or isinstance(rval[1][0], dict)  # type: ignore
-        )
-        if returns_info:
-            obs, info = rval
-            if self.preprocess_fn:
-                processed_data = self.preprocess_fn(
-                    obs=obs, info=info, env_id=np.arange(self.env_num)
-                )
-                obs = processed_data.get("obs", obs)
-                info = processed_data.get("info", info)
-            self.data.info = info
-        else:
-            obs = rval
-            if self.preprocess_fn:
-                obs = self.preprocess_fn(obs=obs, env_id=np.arange(self.env_num
-                                                                   )).get("obs", obs)
+        obs, info = self.env.reset(**gym_reset_kwargs)
+        if self.preprocess_fn:
+            processed_data = self.preprocess_fn(
+                obs=obs, info=info, env_id=np.arange(self.env_num)
+            )
+            obs = processed_data.get("obs", obs)
+            info = processed_data.get("info", info)
+        self.data.info = info
         self.data.obs = obs
 
     def _reset_state(self, id: Union[int, List[int]]) -> None:
@@ -171,24 +171,15 @@ class Collector(object):
         gym_reset_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         gym_reset_kwargs = gym_reset_kwargs if gym_reset_kwargs else {}
-        rval = self.env.reset(global_ids, **gym_reset_kwargs)
-        returns_info = isinstance(rval, (tuple, list)) and len(rval) == 2 and (
-            isinstance(rval[1], dict) or isinstance(rval[1][0], dict)  # type: ignore
-        )
-        if returns_info:
-            obs_reset, info = rval
-            if self.preprocess_fn:
-                processed_data = self.preprocess_fn(
-                    obs=obs_reset, info=info, env_id=global_ids
-                )
-                obs_reset = processed_data.get("obs", obs_reset)
-                info = processed_data.get("info", info)
-            self.data.info[local_ids] = info
-        else:
-            obs_reset = rval
-            if self.preprocess_fn:
-                obs_reset = self.preprocess_fn(obs=obs_reset, env_id=global_ids
-                                               ).get("obs", obs_reset)
+        obs_reset, info = self.env.reset(global_ids, **gym_reset_kwargs)
+        if self.preprocess_fn:
+            processed_data = self.preprocess_fn(
+                obs=obs_reset, info=info, env_id=global_ids
+            )
+            obs_reset = processed_data.get("obs", obs_reset)
+            info = processed_data.get("info", info)
+        self.data.info[local_ids] = info
+
         self.data.obs_next[local_ids] = obs_reset
 
     def collect(
@@ -301,10 +292,20 @@ class Collector(object):
             # get bounded and remapped actions first (not saved into buffer)
             action_remap = self.policy.map_action(self.data.act)
             # step in env
-            result = self.env.step(action_remap, ready_env_ids)  # type: ignore
-            obs_next, rew, done, info = result
+            obs_next, rew, terminated, truncated, info = self.env.step(
+                action_remap,  # type: ignore
+                ready_env_ids
+            )
+            done = np.logical_or(terminated, truncated)
 
-            self.data.update(obs_next=obs_next, rew=rew, done=done, info=info)
+            self.data.update(
+                obs_next=obs_next,
+                rew=rew,
+                terminated=terminated,
+                truncated=truncated,
+                done=done,
+                info=info
+            )
             if self.preprocess_fn:
                 self.data.update(
                     self.preprocess_fn(
@@ -314,6 +315,7 @@ class Collector(object):
                         info=self.data.info,
                         policy=self.data.policy,
                         env_id=ready_env_ids,
+                        act=self.data.act,
                     )
                 )
 
@@ -368,7 +370,15 @@ class Collector(object):
 
         if n_episode:
             self.data = Batch(
-                obs={}, act={}, rew={}, done={}, obs_next={}, info={}, policy={}
+                obs={},
+                act={},
+                rew={},
+                terminated={},
+                truncated={},
+                done={},
+                obs_next={},
+                info={},
+                policy={}
             )
             self.reset_env()
 
@@ -541,8 +551,11 @@ class AsyncCollector(Collector):
             # get bounded and remapped actions first (not saved into buffer)
             action_remap = self.policy.map_action(self.data.act)
             # step in env
-            result = self.env.step(action_remap, ready_env_ids)  # type: ignore
-            obs_next, rew, done, info = result
+            obs_next, rew, terminated, truncated, info = self.env.step(
+                action_remap,  # type: ignore
+                ready_env_ids
+            )
+            done = np.logical_or(terminated, truncated)
 
             # change self.data here because ready_env_ids has changed
             try:
@@ -551,17 +564,37 @@ class AsyncCollector(Collector):
                 ready_env_ids = np.array([i["env_id"] for i in info])
             self.data = whole_data[ready_env_ids]
 
-            self.data.update(obs_next=obs_next, rew=rew, done=done, info=info)
+            self.data.update(
+                obs_next=obs_next,
+                rew=rew,
+                terminated=terminated,
+                truncated=truncated,
+                info=info
+            )
             if self.preprocess_fn:
-                self.data.update(
-                    self.preprocess_fn(
-                        obs_next=self.data.obs_next,
-                        rew=self.data.rew,
-                        done=self.data.done,
-                        info=self.data.info,
-                        env_id=ready_env_ids,
+                try:
+                    self.data.update(
+                        self.preprocess_fn(
+                            obs_next=self.data.obs_next,
+                            rew=self.data.rew,
+                            terminated=self.data.terminated,
+                            truncated=self.data.truncated,
+                            info=self.data.info,
+                            env_id=ready_env_ids,
+                            act=self.data.act,
+                        )
                     )
-                )
+                except TypeError:
+                    self.data.update(
+                        self.preprocess_fn(
+                            obs_next=self.data.obs_next,
+                            rew=self.data.rew,
+                            done=self.data.done,
+                            info=self.data.info,
+                            env_id=ready_env_ids,
+                            act=self.data.act,
+                        )
+                    )
 
             if render:
                 self.env.render()

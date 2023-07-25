@@ -5,22 +5,24 @@ import threading
 import time
 from typing import List, Union
 
-import nni.retiarii.execution.api
-import nni.retiarii.nn.pytorch as nn
-import nni.retiarii.strategy as strategy
+import nni.nas.execution.api
+import nni.nas.nn.pytorch as nn
+import nni.nas.strategy as strategy
+import pytest
 import torch
 import torch.nn.functional as F
-from nni.retiarii import Model
-from nni.retiarii.converter import convert_to_graph
-from nni.retiarii.execution import wait_models
-from nni.retiarii.execution.interface import (
+from nni.nas.execution import wait_models
+from nni.nas.execution.common import (
     AbstractExecutionEngine,
     AbstractGraphListener,
+    DebugEvaluator,
     MetricData,
+    Model,
+    ModelStatus,
     WorkerInfo,
 )
-from nni.retiarii.graph import DebugEvaluator, ModelStatus
-from nni.retiarii.nn.pytorch.mutator import process_inline_mutation
+from nni.nas.execution.pytorch.converter import convert_to_graph
+from nni.nas.nn.pytorch.mutator import process_inline_mutation
 
 
 class MockExecutionEngine(AbstractExecutionEngine):
@@ -62,7 +64,7 @@ class MockExecutionEngine(AbstractExecutionEngine):
 
 
 def _reset_execution_engine(engine=None):
-    nni.retiarii.execution.api._execution_engine = engine
+    nni.nas.execution.api._execution_engine = engine
 
 
 class Net(nn.Module):
@@ -106,6 +108,9 @@ def _get_model_and_mutators(**kwargs):
     return base_model_ir, mutators
 
 
+@pytest.mark.skip(
+    reason="NNI currently uses OpenAI Gym"
+)  # TODO: Remove once NNI transitions to Gymnasium
 def test_rl():
     rl = strategy.PolicyBasedRL(max_collect=2, trial_per_collect=10)
     engine = MockExecutionEngine(failure_prob=0.2)

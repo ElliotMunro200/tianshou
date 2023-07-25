@@ -87,7 +87,7 @@ class Logger:
             return Batch()
 
 
-@pytest.mark.parametrize("gym_reset_kwargs", [None, dict(return_info=True)])
+@pytest.mark.parametrize("gym_reset_kwargs", [None, dict()])
 def test_collector(gym_reset_kwargs):
     writer = SummaryWriter('log/collector')
     logger = Logger(writer)
@@ -212,7 +212,7 @@ def test_collector(gym_reset_kwargs):
         assert c3.buffer.obs.dtype == object
 
 
-@pytest.mark.parametrize("gym_reset_kwargs", [None, dict(return_info=True)])
+@pytest.mark.parametrize("gym_reset_kwargs", [None, dict()])
 def test_collector_with_async(gym_reset_kwargs):
     env_lens = [2, 3, 4, 5]
     writer = SummaryWriter('log/async_collector')
@@ -272,7 +272,7 @@ def test_collector_with_dict_state():
     ]
     envs = DummyVectorEnv(env_fns)
     envs.seed(666)
-    obs = envs.reset()
+    obs, info = envs.reset()
     assert not np.isclose(obs[0]['rand'], obs[1]['rand'])
     c1 = Collector(
         policy, envs, VectorReplayBuffer(total_size=100, buffer_num=4),
@@ -684,7 +684,9 @@ def test_collector_with_atari_setting():
 
 @pytest.mark.skipif(envpool is None, reason="EnvPool doesn't support this platform")
 def test_collector_envpool_gym_reset_return_info():
-    envs = envpool.make_gym("Pendulum-v1", num_envs=4, gym_reset_return_info=True)
+    envs = envpool.make_gymnasium(
+        "Pendulum-v1", num_envs=4, gym_reset_return_info=True
+    )
     policy = MyPolicy(action_shape=(len(envs), 1))
 
     c0 = Collector(
@@ -701,7 +703,7 @@ def test_collector_envpool_gym_reset_return_info():
 
 if __name__ == '__main__':
     test_collector(gym_reset_kwargs=None)
-    test_collector(gym_reset_kwargs=dict(return_info=True))
+    test_collector(gym_reset_kwargs=dict())
     test_collector_with_dict_state()
     test_collector_with_ma()
     test_collector_with_atari_setting()

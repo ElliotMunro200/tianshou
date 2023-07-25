@@ -39,7 +39,7 @@ def get_args():
     parser.add_argument(
         '--logger',
         type=str,
-        default="wandb",
+        default="none",  # TODO: Change to "wandb" once wandb supports Gym >=0.26.0
         choices=["wandb", "tensorboard", "none"],
     )
     return parser.parse_known_args()[0]
@@ -48,10 +48,12 @@ def get_args():
 @pytest.mark.skipif(envpool is None, reason="EnvPool doesn't support this platform")
 def test_psrl(args=get_args()):
     # if you want to use python vector env, please refer to other test scripts
-    train_envs = env = envpool.make_gym(
+    train_envs = env = envpool.make_gymnasium(
         args.task, num_envs=args.training_num, seed=args.seed
     )
-    test_envs = envpool.make_gym(args.task, num_envs=args.test_num, seed=args.seed)
+    test_envs = envpool.make_gymnasium(
+        args.task, num_envs=args.test_num, seed=args.seed
+    )
     if args.reward_threshold is None:
         default_reward_threshold = {"NChain-v0": 3400}
         args.reward_threshold = default_reward_threshold.get(

@@ -5,10 +5,10 @@ from multiprocessing import Array, Pipe, connection
 from multiprocessing.context import Process
 from typing import Any, Callable, List, Optional, Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 
-from tianshou.env.utils import CloudpickleWrapper
+from tianshou.env.utils import CloudpickleWrapper, gym_new_venv_step_type
 from tianshou.env.worker import EnvWorker
 
 _NP_TO_CT = {
@@ -37,21 +37,22 @@ class ShArray:
     def save(self, ndarray: np.ndarray) -> None:
         assert isinstance(ndarray, np.ndarray)
         dst = self.arr.get_obj()
-        dst_np = np.frombuffer(dst, dtype=self.dtype).reshape(self.shape)
+        dst_np = np.frombuffer(dst,
+                               dtype=self.dtype).reshape(self.shape)  # type: ignore
         np.copyto(dst_np, ndarray)
 
     def get(self) -> np.ndarray:
         obj = self.arr.get_obj()
-        return np.frombuffer(obj, dtype=self.dtype).reshape(self.shape)
+        return np.frombuffer(obj, dtype=self.dtype).reshape(self.shape)  # type: ignore
 
 
 def _setup_buf(space: gym.Space) -> Union[dict, tuple, ShArray]:
     if isinstance(space, gym.spaces.Dict):
         assert isinstance(space.spaces, OrderedDict)
         return {k: _setup_buf(v) for k, v in space.spaces.items()}
-    elif isinstance(space, gym.spaces.Tuple):  # type: ignore
-        assert isinstance(space.spaces, tuple)  # type: ignore
-        return tuple([_setup_buf(t) for t in space.spaces])  # type: ignore
+    elif isinstance(space, gym.spaces.Tuple):
+        assert isinstance(space.spaces, tuple)
+        return tuple([_setup_buf(t) for t in space.spaces])
     else:
         return ShArray(space.dtype, space.shape)  # type: ignore
 
@@ -86,27 +87,17 @@ def _worker(
                 p.close()
                 break
             if cmd == "step":
-                obs, reward, done, info = env.step(data)
+                env_return = env.step(data)
                 if obs_bufs is not None:
-                    _encode_obs(obs, obs_bufs)
-                    obs = None
-                p.send((obs, reward, done, info))
+                    _encode_obs(env_return[0], obs_bufs)
+                    env_return = (None, *env_return[1:])
+                p.send(env_return)
             elif cmd == "reset":
-                retval = env.reset(**data)
-                reset_returns_info = isinstance(
-                    retval, (tuple, list)
-                ) and len(retval) == 2 and isinstance(retval[1], dict)
-                if reset_returns_info:
-                    obs, info = retval
-                else:
-                    obs = retval
+                obs, info = env.reset(**data)
                 if obs_bufs is not None:
                     _encode_obs(obs, obs_bufs)
                     obs = None
-                if reset_returns_info:
-                    p.send((obs, info))
-                else:
-                    p.send(obs)
+                p.send((obs, info))
             elif cmd == "close":
                 p.send(env.close())
                 p.close()
@@ -209,8 +200,7 @@ class SubprocEnvWorker(EnvWorker):
 
     def recv(
         self
-    ) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray], Tuple[
-        np.ndarray, dict], np.ndarray]:  # noqa:E125
+    ) -> Union[gym_new_venv_step_type, Tuple[np.ndarray, dict]]:  # noqa:E125
         result = self.parent_remote.recv()
         if isinstance(result, tuple):
             if len(result) == 2:
@@ -218,17 +208,17 @@ class SubprocEnvWorker(EnvWorker):
                 if self.share_memory:
                     obs = self._decode_obs()
                 return obs, info
-            obs, rew, done, info = result
+            obs = result[0]
             if self.share_memory:
                 obs = self._decode_obs()
-            return obs, rew, done, info
+            return (obs, *result[1:])  # type: ignore
         else:
             obs = result
             if self.share_memory:
                 obs = self._decode_obs()
             return obs
 
-    def reset(self, **kwargs: Any) -> Union[np.ndarray, Tuple[np.ndarray, dict]]:
+    def reset(self, **kwargs: Any) -> Tuple[np.ndarray, dict]:
         if "seed" in kwargs:
             super().seed(kwargs["seed"])
         self.parent_remote.send(["reset", kwargs])

@@ -40,6 +40,7 @@ Welcome to Tianshou!
 * :class:`~tianshou.policy.ICMPolicy` `Intrinsic Curiosity Module <https://arxiv.org/pdf/1705.05363.pdf>`_
 * :class:`~tianshou.data.PrioritizedReplayBuffer` `Prioritized Experience Replay <https://arxiv.org/pdf/1511.05952.pdf>`_
 * :meth:`~tianshou.policy.BasePolicy.compute_episodic_return` `Generalized Advantage Estimator <https://arxiv.org/pdf/1506.02438.pdf>`_
+* :class:`~tianshou.data.HERReplayBuffer` `Hindsight Experience Replay <https://arxiv.org/pdf/1707.01495.pdf>`_
 
 Here is Tianshou's other features:
 
@@ -74,7 +75,7 @@ If you use Anaconda or Miniconda, you can install Tianshou from conda-forge thro
 
 .. code-block:: bash
 
-    $ conda -c conda-forge install tianshou
+    $ conda install tianshou -c conda-forge
 
 You can also install with the newest version through GitHub:
 

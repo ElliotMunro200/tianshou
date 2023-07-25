@@ -15,23 +15,24 @@ def get_version() -> str:
 
 def get_install_requires() -> str:
     return [
-        "gym>=0.23.1",
+        "gymnasium>=0.26.0",
         "tqdm",
         "numpy>1.16.0",  # https://github.com/numpy/numpy/issues/12793
         "tensorboard>=2.5.0",
         "torch>=1.4.0",
         "numba>=0.51.0",
         "h5py>=2.10.0",  # to match tensorflow's minimal requirements
-        "protobuf~=3.19.0",  # breaking change, sphinx fail
+        "packaging",
+        "pettingzoo>=1.22",
     ]
 
 
 def get_extras_require() -> str:
     req = {
         "dev": [
-            "sphinx<4",
+            "sphinx",
             "sphinx_rtd_theme",
-            "jinja2<3.1",  # temporary fix
+            "jinja2",
             "sphinxcontrib-bibtex",
             "flake8",
             "flake8-bugbear",
@@ -47,17 +48,19 @@ def get_extras_require() -> str:
             "doc8",
             "scipy",
             "pillow",
-            "pettingzoo>=1.17",
             "pygame>=2.1.0",  # pettingzoo test cases pistonball
             "pymunk>=6.2.1",  # pettingzoo test cases pistonball
-            "nni>=2.3",
+            "nni>=2.3,<3.0",  # expect breaking changes at next major version
+            "pytorch_lightning",
+            "gym>=0.22.0",
+            "shimmy",
         ],
         "atari": ["atari_py", "opencv-python"],
         "mujoco": ["mujoco_py"],
         "pybullet": ["pybullet"],
     }
     if sys.platform == "linux":
-        req["dev"].append("envpool>=0.5.3")
+        req["dev"].append("envpool>=0.7.0")
     return req
 
 
